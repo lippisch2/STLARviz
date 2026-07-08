@@ -7,19 +7,18 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 100%; height: 100%; overflow: hidden;
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #000;
+      background: transparent;
       touch-action: none;
       -webkit-user-select: none;
       user-select: none;
     }
 
     a-scene {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      z-index: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     #panel {
@@ -197,7 +196,7 @@
   </style>
 </head>
 <body>
-  <a-scene id="scene" embedded arjs>
+  <a-scene id="scene" embedded arjs background="transparent: true;">
     <a-marker preset="hiro">
       <a-entity id="model" position="0 0.3 0"></a-entity>
     </a-marker>
@@ -571,10 +570,14 @@
   }
 
   function onSceneReady() {
-    // AR.js adds the canvas. Try to get it.
     const tryGetCanvas = function () {
       const canvas = document.querySelector('canvas');
       if (canvas) {
+        // Ensure renderer clears to transparent so camera video shows through
+        const el = document.getElementById('scene');
+        if (el.renderer) {
+          el.renderer.setClearColor(0x000000, 0);
+        }
         setupTouchRotation(canvas);
         setStatus('Ready \u2014 show Hiro marker', 'ok');
       } else {
