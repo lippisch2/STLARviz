@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>STLARviz</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    a-scene {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      z-index: 0;
+    }
+
+    #panel {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 100;
+      background: rgba(16, 16, 24, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: #e0e0e0;
+      padding: 10px 14px 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      max-height: 44vh;
+      overflow-y: auto;
+      touch-action: pan-y;
+    }
+
+    #panel::-webkit-scrollbar { width: 3px; }
+    #panel::-webkit-scrollbar-track { background: transparent; }
+    #panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .panel-header h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+
+    .panel-header h1 span { color: #6af; }
+
+    #status {
+      font-size: 11px;
+      color: #888;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.05);
+    }
+
+    #status.ok { color: #4caf50; }
+    #status.err { color: #f44336; }
+    #status.busy { color: #ffa726; }
+
+    .section { margin-bottom: 7px; }
+    .section:last-child { margin-bottom: 0; }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .load-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+
+    .load-row input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 5px;
+      background: rgba(255,255,255,0.06);
+      color: #e0e0e0;
+      font-size: 11px;
+      outline: none;
+    }
+
+    .load-row input[type="text"]:focus {
+      border-color: #6af;
+    }
+
+    .load-row input[type="text"]::placeholder { color: #555; }
+
+    #fileInput { display: none; }
+
+    .btn {
+      padding: 5px 12px;
+      border: none;
+      border-radius: 5px;
+      background: #6af;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn:active { transform: scale(0.95); }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #6af;
+      color: #6af;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 14px;
+    }
+
+    @media (max-width: 420px) {
+      .controls-grid { grid-template-columns: 1fr; }
+    }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .slider-row .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #999;
+      line-height: 1.6;
+    }
+
+    .slider-row .slider-label .val { color: #6af; font-weight: 600; min-width: 32px; text-align: right; }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      outline: none;
+      margin: 0;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #6af;
+      cursor: pointer;
+      border: 2px solid rgba(255,255,255,0.15);
+      transition: transform 0.1s;
+      margin-top: -5px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:active {
+      transform: scale(1.2);
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+    }
+
+    .hint {
+      font-size: 10px;
+      color: #555;
+      text-align: center;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <a-scene id="scene" embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
+    <a-marker preset="hiro">
+      <a-entity id="model" position="0 0.3 0"></a-entity>
+    </a-marker>
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <div id="panel">
+    <div class="panel-header">
+      <h1>STL<span>AR</span>viz</h1>
+      <span id="status">Initializing camera...</span>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Load Model</div>
+      <div class="load-row">
+        <button class="btn btn-outline" id="fileBtn">Browse</button>
+        <input type="file" id="fileInput" accept=".stl">
+        <input type="text" id="urlInput" placeholder="Paste STL URL..." />
+        <button class="btn" id="loadBtn">Load</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Transform</div>
+      <div class="controls-grid">
+        <div class="slider-row">
+          <div class="slider-label"><span>Rotate X</span><span class="val" id="rotXVal">0&deg;</span></div>
+          <input type="range" id="rotX" min="-180" max="180" value="0">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Rotate Y</span><span class="val" id="rotYVal">0&deg;</span></div>
+          <input type="range" id="rotY" min="-180" max="180" value="0">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Rotate Z</span><span class="val" id="rotZVal">0&deg;</span></div>
+          <input type="range" id="rotZ" min="-180" max="180" value="0">
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Scale</span><span class="val" id="scaleVal">1.0</span></div>
+          <input type="range" id="scaleSlider" min="0.1" max="5" step="0.01" value="1.0">
+        </div>
+      </div>
+      <div class="hint">&#x1f447; Touch the camera view & drag to rotate</div>
+    </div>
+  </div>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
+
+  <script>
+(function () {
+  'use strict';
+
+  // ─── DOM refs ───────────────────────────────────────────────
+  const model = document.getElementById('model');
+  const statusEl = document.getElementById('status');
+  const fileBtn = document.getElementById('fileBtn');
+  const fileInput = document.getElementById('fileInput');
+  const urlInput = document.getElementById('urlInput');
+  const loadBtn = document.getElementById('loadBtn');
+  const rotX = document.getElementById('rotX');
+  const rotY = document.getElementById('rotY');
+  const rotZ = document.getElementById('rotZ');
+  const scaleSlider = document.getElementById('scaleSlider');
+  const rotXVal = document.getElementById('rotXVal');
+  const rotYVal = document.getElementById('rotYVal');
+  const rotZVal = document.getElementById('rotZVal');
+  const scaleVal = document.getElementById('scaleVal');
+
+  // ─── State ──────────────────────────────────────────────────
+  const state = {
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 1,
+    autoScale: 1,
+    hasModel: false
+  };
+
+  let suppressingUpdate = false;
+
+  // ─── STL Parser ─────────────────────────────────────────────
+  function parseSTL(buffer) {
+    const dv = new DataView(buffer);
+    const headerText = new TextDecoder('utf-8').decode(new Uint8Array(buffer, 0, 80)).trim();
+    const isAscii = headerText.startsWith('solid');
+    return isAscii ? parseASCII_STL(buffer) : parseBinary_STL(buffer);
+  }
+
+  function parseASCII_STL(buffer) {
+    const text = new TextDecoder('utf-8').decode(buffer);
+    const positions = [];
+    const normals = [];
+    const facetRegex = /facet\s+normal\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)([\s\S]*?)endfacet/gi;
+    const vertexRegex = /vertex\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/g;
+    let fm;
+    while ((fm = facetRegex.exec(text)) !== null) {
+      const nx = parseFloat(fm[1]), ny = parseFloat(fm[2]), nz = parseFloat(fm[3]);
+      const content = fm[4];
+      let vm, vc = 0;
+      while ((vm = vertexRegex.exec(content)) !== null && vc < 3) {
+        positions.push(parseFloat(vm[1]), parseFloat(vm[2]), parseFloat(vm[3]));
+        normals.push(nx, ny, nz);
+        vc++;
+      }
+    }
+    return buildGeometry(positions, normals);
+  }
+
+  function parseBinary_STL(buffer) {
+    const dv = new DataView(buffer);
+    const count = dv.getUint32(80, true);
+    const positions = new Float32Array(count * 9);
+    const normals = new Float32Array(count * 9);
+    let off = 84;
+    for (let i = 0; i < count; i++) {
+      const nx = dv.getFloat32(off, true); off += 4;
+      const ny = dv.getFloat32(off, true); off += 4;
+      const nz = dv.getFloat32(off, true); off += 4;
+      for (let j = 0; j < 3; j++) {
+        const vx = dv.getFloat32(off, true); off += 4;
+        const vy = dv.getFloat32(off, true); off += 4;
+        const vz = dv.getFloat32(off, true); off += 4;
+        const idx = i * 9 + j * 3;
+        positions[idx] = vx; positions[idx + 1] = vy; positions[idx + 2] = vz;
+        normals[idx] = nx; normals[idx + 1] = ny; normals[idx + 2] = nz;
+      }
+      off += 2;
+    }
+    return buildGeometry(Array.from(positions), Array.from(normals));
+  }
+
+  function buildGeometry(posArr, normArr) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normArr, 3));
+
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    const cx = (bb.max.x + bb.min.x) / 2;
+    const cy = (bb.max.y + bb.min.y) / 2;
+    const cz = (bb.max.z + bb.min.z) / 2;
+    const sx = bb.max.x - bb.min.x;
+    const sy = bb.max.y - bb.min.y;
+    const sz = bb.max.z - bb.min.z;
+    const maxDim = Math.max(sx, sy, sz, 0.001);
+
+    // center geometry
+    geo.translate(-cx, -cy, -cz);
+
+    return { geometry: geo, autoScale: 0.25 / maxDim };
+  }
+
+  // ─── Model management ───────────────────────────────────────
+  function setModelGeometry(geometry, autoScale) {
+    while (model.firstChild) {
+      model.removeChild(model.firstChild);
+    }
+
+    const oldMesh = model.getObject3D('mesh');
+    if (oldMesh) {
+      oldMesh.geometry.dispose();
+      oldMesh.material.dispose();
+    }
+
+    const mat = new THREE.MeshPhongMaterial({
+      color: 0x4a90d9,
+      specular: 0x333333,
+      shininess: 40,
+      flatShading: true
+    });
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    model.setObject3D('mesh', mesh);
+
+    state.autoScale = autoScale;
+    state.hasModel = true;
+
+    // Set initial scale
+    const s = state.scale * autoScale;
+    model.setAttribute('scale', s + ' ' + s + ' ' + s);
+  }
+
+  function showPlaceholder() {
+    while (model.firstChild) {
+      model.removeChild(model.firstChild);
+    }
+    const oldMesh = model.getObject3D('mesh');
+    if (oldMesh) {
+      oldMesh.geometry.dispose();
+      oldMesh.material.dispose();
+    }
+    model.removeObject3D('mesh');
+
+    const box = document.createElement('a-box');
+    box.setAttribute('color', '#4A90D9');
+    box.setAttribute('width', '0.12');
+    box.setAttribute('height', '0.12');
+    box.setAttribute('depth', '0.12');
+    model.appendChild(box);
+
+    state.hasModel = false;
+    model.setAttribute('scale', '1 1 1');
+  }
+
+  function setStatus(text, type) {
+    statusEl.textContent = text;
+    statusEl.className = type || '';
+  }
+
+  // ─── Transform sync ─────────────────────────────────────────
+  function updateTransform() {
+    if (suppressingUpdate) return;
+
+    const r = state.rotation;
+    model.setAttribute('rotation', r.x + ' ' + r.y + ' ' + r.z);
+
+    const s = state.hasModel ? state.scale * state.autoScale : state.scale;
+    model.setAttribute('scale', s + ' ' + s + ' ' + s);
+  }
+
+  function syncSlidersFromState() {
+    suppressingUpdate = true;
+    rotX.value = state.rotation.x;
+    rotY.value = state.rotation.y;
+    rotZ.value = state.rotation.z;
+    scaleSlider.value = state.scale;
+    rotXVal.textContent = Math.round(state.rotation.x) + '\u00B0';
+    rotYVal.textContent = Math.round(state.rotation.y) + '\u00B0';
+    rotZVal.textContent = Math.round(state.rotation.z) + '\u00B0';
+    scaleVal.textContent = state.scale.toFixed(1);
+    suppressingUpdate = false;
+  }
+
+  function readStateFromSliders() {
+    state.rotation.x = parseFloat(rotX.value);
+    state.rotation.y = parseFloat(rotY.value);
+    state.rotation.z = parseFloat(rotZ.value);
+    state.scale = parseFloat(scaleSlider.value);
+    rotXVal.textContent = Math.round(state.rotation.x) + '\u00B0';
+    rotYVal.textContent = Math.round(state.rotation.y) + '\u00B0';
+    rotZVal.textContent = Math.round(state.rotation.z) + '\u00B0';
+    scaleVal.textContent = state.scale.toFixed(1);
+  }
+
+  // ─── Load functions ─────────────────────────────────────────
+  async function loadFromURL(url) {
+    setStatus('Downloading...', 'busy');
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const buffer = await resp.arrayBuffer();
+      applySTL(buffer);
+    } catch (e) {
+      setStatus('Load failed: ' + e.message, 'err');
+    }
+  }
+
+  function loadFromFile(file) {
+    if (!file.name.toLowerCase().endsWith('.stl')) {
+      setStatus('Please select an .stl file', 'err');
+      return;
+    }
+    setStatus('Reading file...', 'busy');
+    const reader = new FileReader();
+    reader.onload = function () {
+      applySTL(reader.result);
+    };
+    reader.onerror = function () {
+      setStatus('File read error', 'err');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function applySTL(buffer) {
+    setStatus('Parsing STL...', 'busy');
+    try {
+      const { geometry, autoScale } = parseSTL(buffer);
+      setModelGeometry(geometry, autoScale);
+      setStatus('Model loaded (' + (geometry.attributes.position.count / 3) + ' triangles)', 'ok');
+    } catch (e) {
+      setStatus('Parse error: ' + e.message, 'err');
+    }
+  }
+
+  // ─── Touch rotation ─────────────────────────────────────────
+  let touchData = null;
+
+  function setupTouchRotation(canvas) {
+    canvas.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      if (e.target.closest('#panel')) return;
+      const t = e.touches[0];
+      touchData = {
+        startX: t.clientX,
+        startY: t.clientY,
+        rotX: state.rotation.x,
+        rotY: state.rotation.y
+      };
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', function (e) {
+      if (!touchData || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchData.startX;
+      const dy = t.clientY - touchData.startY;
+      state.rotation.y = touchData.rotY + dx * 0.4;
+      state.rotation.x = Math.max(-180, Math.min(180, touchData.rotX + dy * 0.4));
+      updateTransform();
+      syncSlidersFromState();
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', function () {
+      touchData = null;
+    }, { passive: true });
+  }
+
+  // ─── Init ───────────────────────────────────────────────────
+  function init() {
+    showPlaceholder();
+
+    // Slider events
+    rotX.addEventListener('input', function () {
+      readStateFromSliders();
+      updateTransform();
+    });
+    rotY.addEventListener('input', function () {
+      readStateFromSliders();
+      updateTransform();
+    });
+    rotZ.addEventListener('input', function () {
+      readStateFromSliders();
+      updateTransform();
+    });
+    scaleSlider.addEventListener('input', function () {
+      readStateFromSliders();
+      updateTransform();
+    });
+
+    // File button
+    fileBtn.addEventListener('click', function () {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length > 0) {
+        loadFromFile(fileInput.files[0]);
+      }
+    });
+
+    // URL load
+    loadBtn.addEventListener('click', function () {
+      const url = urlInput.value.trim();
+      if (!url) {
+        setStatus('Enter a URL', 'err');
+        return;
+      }
+      loadFromURL(url);
+    });
+
+    urlInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') loadBtn.click();
+    });
+
+    // Wait for scene to render then setup touch
+    const scene = document.getElementById('scene');
+    if (scene.hasLoaded) {
+      onSceneReady();
+    } else {
+      scene.addEventListener('loaded', onSceneReady);
+    }
+  }
+
+  function onSceneReady() {
+    // AR.js adds the canvas. Try to get it.
+    const tryGetCanvas = function () {
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        setupTouchRotation(canvas);
+        setStatus('Ready \u2014 show Hiro marker', 'ok');
+      } else {
+        setTimeout(tryGetCanvas, 500);
+      }
+    };
+    setTimeout(tryGetCanvas, 1000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+  </script>
+</body>
+</html>
