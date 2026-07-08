@@ -206,6 +206,18 @@
       outline: none;
       vertical-align: middle;
       transition: transform 0.1s, border-color 0.15s;
+      position: relative;
+    }
+    .color-swatch[data-shader]::after {
+      content: 'B';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(0,0,0,0.35);
+      pointer-events: none;
     }
     .color-swatch:active {
       transform: scale(0.88);
@@ -277,7 +289,8 @@
           <button class="color-swatch active" data-color="#4A90D9" style="background:#4A90D9"></button>
           <button class="color-swatch" data-color="#E74C3C" style="background:#E74C3C"></button>
           <button class="color-swatch" data-color="#2ECC71" style="background:#2ECC71"></button>
-          <button class="color-swatch" data-color="#4A90D9" style="background:#4A90D9"></button>
+          <button class="color-swatch" data-color="#F39C12" style="background:#F39C12"></button>
+          <button class="color-swatch" data-shader="bone" style="background:linear-gradient(135deg,#E8DCC8,#D4C5A9)"></button>
         </div>
       </div>
       <div class="hint">&#x1f447; Touch the camera view & drag to rotate</div>
@@ -316,6 +329,7 @@
     scale: 1,
     autoScale: 1,
     hasModel: false,
+    shaderMode: null,
     distance: 0.3,
     color: '#4A90D9'
   };
@@ -405,6 +419,22 @@
       oldMesh.geometry.dispose();
       oldMesh.material.dispose();
     }
+    model.removeObject3D('mesh');
+
+    state.autoScale = autoScale;
+    state.hasModel = true;
+
+    if (state.shaderMode === 'bone') {
+      var mat = createBoneMaterial();
+      var mesh = new THREE.Mesh(geometry, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      model.setObject3D('mesh', mesh);
+
+      var s = state.scale * autoScale;
+      model.setAttribute('scale', s + ' ' + s + ' ' + s);
+      return;
+    }
 
     const mat = new THREE.MeshPhongMaterial({
       color: 0x4a90d9,
@@ -416,9 +446,6 @@
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     model.setObject3D('mesh', mesh);
-
-    state.autoScale = autoScale;
-    state.hasModel = true;
 
     // Set initial scale
     const s = state.scale * autoScale;
@@ -436,6 +463,19 @@
     }
     model.removeObject3D('mesh');
 
+    state.hasModel = false;
+
+    if (state.shaderMode === 'bone') {
+      var geo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      var mat = createBoneMaterial();
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      model.setObject3D('mesh', mesh);
+      model.setAttribute('scale', '1 1 1');
+      return;
+    }
+
     const box = document.createElement('a-box');
     box.setAttribute('color', '#4A90D9');
     box.setAttribute('width', '0.12');
@@ -443,7 +483,6 @@
     box.setAttribute('depth', '0.12');
     model.appendChild(box);
 
-    state.hasModel = false;
     model.setAttribute('scale', '1 1 1');
   }
 
@@ -454,6 +493,7 @@
 
   // ─── Color control ──────────────────────────────────────────
   function setModelColor(hexColor) {
+    if (state.shaderMode) removeShader();
     state.color = hexColor;
     if (state.hasModel) {
       const mesh = model.getObject3D('mesh');
@@ -468,6 +508,141 @@
     }
     colorSwatches.forEach(function (el) {
       el.classList.toggle('active', el.dataset.color === hexColor);
+    });
+  }
+
+  // ─── Bone shader ────────────────────────────────────────────
+  var boneUniformDef = {
+    baseColor: { value: new THREE.Color(0xE8DCC8) },
+    noiseScale: { value: 4.0 },
+    poreScale: { value: 12.0 }
+  };
+
+  var boneVertSrc = [
+    'varying vec3 vPos;',
+    'varying vec3 vNorm;',
+    'void main(){',
+    '  vPos=position;',
+    '  vNorm=normalize(normalMatrix*normal);',
+    '  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);',
+    '}'
+  ].join('\n');
+
+  var boneFragSrc = [
+    'uniform vec3 baseColor;',
+    'uniform float noiseScale;',
+    'uniform float poreScale;',
+    'varying vec3 vPos;',
+    'varying vec3 vNorm;',
+    'float h(vec3 p){',
+    '  p=fract(p*0.3183099+0.1);p*=17.0;',
+    '  return fract(p.x*p.y*p.z*(p.x+p.y+p.z));',
+    '}',
+    'float n(vec3 p){',
+    '  vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);',
+    '  return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),',
+    '    mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),',
+    '    mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),',
+    '    mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z);',
+    '}',
+    'void main(){',
+    '  vec3 p=vPos*noiseScale,q=vPos*poreScale;',
+    '  float c1=n(p)*.5+n(p*2.+1.5)*.25;',
+    '  float grain=n(p*4.+3.7)*.04;',
+    '  float pore=smoothstep(.58,.72,n(q*3.+1.2))*.08;',
+    '  vec3 col=baseColor+(c1-.375)*.18+grain-pore;',
+    '  vec3 ld=normalize(vec3(.3,1.,.2));',
+    '  float d=dot(normalize(vNorm),ld)*.5+.5;',
+    '  col*=(.55+d*.45);',
+    '  gl_FragColor=vec4(col,1.);',
+    '}'
+  ].join('\n');
+
+  function createBoneMaterial() {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        baseColor: { value: new THREE.Color(0xE8DCC8) },
+        noiseScale: { value: 4.0 },
+        poreScale: { value: 12.0 }
+      },
+      vertexShader: boneVertSrc,
+      fragmentShader: boneFragSrc,
+      side: THREE.DoubleSide
+    });
+  }
+
+  function applyBoneShader() {
+    var isPlaceholder = !state.hasModel;
+    var geometry;
+
+    if (isPlaceholder) {
+      while (model.firstChild) model.removeChild(model.firstChild);
+      model.removeObject3D('mesh');
+      geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+    } else {
+      var mesh = model.getObject3D('mesh');
+      if (!mesh) return;
+      geometry = mesh.geometry;
+      mesh.material.dispose();
+      model.removeObject3D('mesh');
+      while (model.firstChild) model.removeChild(model.firstChild);
+    }
+
+    var mat = createBoneMaterial();
+    var newMesh = new THREE.Mesh(geometry, mat);
+    newMesh.castShadow = true;
+    newMesh.receiveShadow = true;
+    model.setObject3D('mesh', newMesh);
+
+    state.shaderMode = 'bone';
+
+    // Re-apply current scale
+    var s = state.hasModel ? state.scale * state.autoScale : state.scale;
+    model.setAttribute('scale', s + ' ' + s + ' ' + s);
+
+    colorSwatches.forEach(function (el) {
+      el.classList.toggle('active', el.dataset.shader === 'bone');
+    });
+  }
+
+  function removeShader() {
+    if (!state.shaderMode) return;
+
+    var mesh = model.getObject3D('mesh');
+    var geometry;
+
+    if (mesh) {
+      geometry = mesh.geometry;
+      mesh.material.dispose();
+      model.removeObject3D('mesh');
+    }
+
+    while (model.firstChild) model.removeChild(model.firstChild);
+
+    if (state.hasModel && geometry) {
+      var mat = new THREE.MeshPhongMaterial({
+        color: state.color,
+        specular: 0x333333,
+        shininess: 40,
+        flatShading: true
+      });
+      var newMesh = new THREE.Mesh(geometry, mat);
+      newMesh.castShadow = true;
+      newMesh.receiveShadow = true;
+      model.setObject3D('mesh', newMesh);
+    } else {
+      var box = document.createElement('a-box');
+      box.setAttribute('color', state.color);
+      box.setAttribute('width', '0.12');
+      box.setAttribute('height', '0.12');
+      box.setAttribute('depth', '0.12');
+      model.appendChild(box);
+    }
+
+    state.shaderMode = null;
+
+    colorSwatches.forEach(function (el) {
+      el.classList.toggle('active', el.dataset.color === state.color);
     });
   }
 
@@ -612,7 +787,11 @@
     });
     colorSwatches.forEach(function (btn) {
       btn.addEventListener('click', function () {
-        setModelColor(btn.dataset.color);
+        if (btn.dataset.shader === 'bone') {
+          if (state.shaderMode !== 'bone') applyBoneShader();
+        } else {
+          setModelColor(btn.dataset.color);
+        }
       });
     });
 
