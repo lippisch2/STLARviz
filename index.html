@@ -236,7 +236,7 @@
   </style>
 </head>
 <body>
-  <a-scene id="scene" embedded arjs background="transparent: true;">
+  <a-scene id="scene" embedded arjs>
     <a-marker preset="hiro">
       <a-entity id="model" position="0 0.3 0"></a-entity>
     </a-marker>
@@ -414,12 +414,14 @@
       model.removeChild(model.firstChild);
     }
 
-    const oldMesh = model.getObject3D('mesh');
-    if (oldMesh) {
-      oldMesh.geometry.dispose();
-      oldMesh.material.dispose();
-    }
-    model.removeObject3D('mesh');
+    try {
+      var oldMesh = model.getObject3D('mesh');
+      if (oldMesh) {
+        oldMesh.geometry.dispose();
+        oldMesh.material.dispose();
+      }
+      model.removeObject3D('mesh');
+    } catch(e) { /* entity not yet initialized */ }
 
     state.autoScale = autoScale;
     state.hasModel = true;
@@ -456,12 +458,14 @@
     while (model.firstChild) {
       model.removeChild(model.firstChild);
     }
-    const oldMesh = model.getObject3D('mesh');
-    if (oldMesh) {
-      oldMesh.geometry.dispose();
-      oldMesh.material.dispose();
-    }
-    model.removeObject3D('mesh');
+    try {
+      var oldMesh = model.getObject3D('mesh');
+      if (oldMesh) {
+        oldMesh.geometry.dispose();
+        oldMesh.material.dispose();
+      }
+      model.removeObject3D('mesh');
+    } catch(e) { /* entity not yet initialized */ }
 
     state.hasModel = false;
 
@@ -571,14 +575,15 @@
 
     if (isPlaceholder) {
       while (model.firstChild) model.removeChild(model.firstChild);
-      model.removeObject3D('mesh');
+      try { model.removeObject3D('mesh'); } catch(e) {}
       geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
     } else {
-      var mesh = model.getObject3D('mesh');
+      var mesh;
+      try { mesh = model.getObject3D('mesh'); } catch(e) {}
       if (!mesh) return;
       geometry = mesh.geometry;
       mesh.material.dispose();
-      model.removeObject3D('mesh');
+      try { model.removeObject3D('mesh'); } catch(e) {}
       while (model.firstChild) model.removeChild(model.firstChild);
     }
 
@@ -602,14 +607,15 @@
   function removeShader() {
     if (!state.shaderMode) return;
 
-    var mesh = model.getObject3D('mesh');
     var geometry;
-
-    if (mesh) {
-      geometry = mesh.geometry;
-      mesh.material.dispose();
+    try {
+      var mesh = model.getObject3D('mesh');
+      if (mesh) {
+        geometry = mesh.geometry;
+        mesh.material.dispose();
+      }
       model.removeObject3D('mesh');
-    }
+    } catch(e) {}
 
     while (model.firstChild) model.removeChild(model.firstChild);
 
@@ -755,13 +761,14 @@
 
   // ─── Init ───────────────────────────────────────────────────
   function init() {
-    showPlaceholder();
+    try {
+      showPlaceholder();
 
-    // Slider events
-    rotX.addEventListener('input', function () {
-      readStateFromSliders();
-      updateTransform();
-    });
+      // Slider events
+      rotX.addEventListener('input', function () {
+        readStateFromSliders();
+        updateTransform();
+      });
     rotY.addEventListener('input', function () {
       readStateFromSliders();
       updateTransform();
@@ -833,6 +840,9 @@
         }
       }
     }, 6000);
+    } catch (e) {
+      setStatus('Init error: ' + (e.message || e), 'err');
+    }
   }
 
   function onSceneReady() {
