@@ -298,7 +298,7 @@
   </div>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.7/aframe/build/aframe-ar.js"></script>
 
   <script>
 (function () {
@@ -820,6 +820,19 @@
     } else {
       scene.addEventListener('loaded', onSceneReady);
     }
+    // Fallback: if loaded never fires, try canvas anyway after 6s
+    setTimeout(function () {
+      if (document.querySelector('canvas')) {
+        var el = document.getElementById('scene');
+        if (el.renderer) { el.renderer.setClearColor(0x000000, 0); }
+        var canvas = document.querySelector('canvas');
+        if (canvas && !canvas._touchSetup) {
+          canvas._touchSetup = true;
+          setupTouchRotation(canvas);
+          setStatus('Ready \u2014 show Hiro marker', 'ok');
+        }
+      }
+    }, 6000);
   }
 
   function onSceneReady() {
