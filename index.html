@@ -69,6 +69,45 @@
     #status.err { color: #f44336; }
     #status.busy { color: #ffa726; }
 
+    #qrOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #qrOverlay.show { display: flex; }
+    #qrVideo {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 8px;
+      background: #000;
+    }
+    #qrOverlay .qr-status {
+      color: #ccc;
+      font-size: 12px;
+      margin: 12px 0;
+      text-align: center;
+    }
+    #qrClose {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      font-size: 22px;
+      line-height: 1;
+      color: #fff;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+    }
+
     .section { margin-bottom: 7px; }
     .section:last-child { margin-bottom: 0; }
 
@@ -122,6 +161,12 @@
     }
 
     .btn:active { transform: scale(0.95); }
+
+  .btn.active {
+    background: #4a90d9;
+    color: #fff;
+    border-color: #4a90d9;
+  }
 
     .btn-outline {
       background: transparent;
@@ -245,6 +290,9 @@
         <input type="text" id="urlInput" placeholder="Paste STL URL..." />
         <button class="btn" id="loadBtn">Load</button>
       </div>
+      <div class="load-row" style="margin-top:6px">
+        <button class="btn btn-outline" id="qrBtn">Scan QR</button>
+      </div>
     </div>
 
     <div class="section">
@@ -285,8 +333,15 @@
     </div>
   </div>
 
+  <div id="qrOverlay">
+    <button id="qrClose">&times;</button>
+    <video id="qrVideo" playsinline></video>
+    <div class="qr-status" id="qrStatus">Point camera at a QR code linking to an .stl file</div>
+  </div>
+
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.7/aframe/build/aframe-ar.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <script>
 (function () {
@@ -299,6 +354,11 @@
   const fileInput = document.getElementById('fileInput');
   const urlInput = document.getElementById('urlInput');
   const loadBtn = document.getElementById('loadBtn');
+  const qrBtn = document.getElementById('qrBtn');
+  const qrOverlay = document.getElementById('qrOverlay');
+  const qrVideo = document.getElementById('qrVideo');
+  const qrStatus = document.getElementById('qrStatus');
+  const qrClose = document.getElementById('qrClose');
   const rotX = document.getElementById('rotX');
   const rotY = document.getElementById('rotY');
   const rotZ = document.getElementById('rotZ');
@@ -557,6 +617,81 @@
     }
   }
 
+  // ─── QR scan ──────────────────────────────────────────────
+  let qrStream = null;
+  let qrScanning = false;
+
+  function startQRScan() {
+    if (typeof jsQR === 'undefined') {
+      setStatus('QR library not loaded', 'err');
+      return;
+    }
+    qrOverlay.classList.add('show');
+    qrStatus.textContent = 'Point camera at a QR code linking to an .stl file';
+    qrBtn.classList.add('active');
+    qrScanning = true;
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(function (stream) {
+        qrStream = stream;
+        qrVideo.srcObject = stream;
+        qrVideo.setAttribute('playsinline', '');
+        qrVideo.play();
+        requestAnimationFrame(qrTick);
+      })
+      .catch(function (e) {
+        qrStatus.textContent = 'Camera error: ' + e.message;
+        setStatus('Camera blocked', 'err');
+        stopQRScan();
+      });
+  }
+
+  function qrTick() {
+    if (!qrScanning) return;
+    if (qrVideo.readyState === qrVideo.HAVE_ENOUGH_DATA) {
+      const vw = qrVideo.videoWidth;
+      const vh = qrVideo.videoHeight;
+      const canvas = qrTick.canvas || (qrTick.canvas = document.createElement('canvas'));
+      if (canvas.width !== vw || canvas.height !== vh) {
+        canvas.width = vw;
+        canvas.height = vh;
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(qrVideo, 0, 0, vw, vh);
+      const imageData = ctx.getImageData(0, 0, vw, vh);
+      const code = jsQR(imageData.data, vw, vh);
+      if (code && code.data) {
+        handleQRResult(code.data);
+        return;
+      }
+    }
+    requestAnimationFrame(qrTick);
+  }
+
+  function handleQRResult(text) {
+    const url = text.trim();
+    qrStatus.textContent = 'Scanned: ' + url;
+    stopQRScan();
+    if (/\.stl(\?|$)/i.test(url) || url.toLowerCase().endsWith('.stl')) {
+      urlInput.value = url;
+      loadFromURL(url);
+    } else {
+      setStatus('QR is not an .stl link', 'err');
+      urlInput.value = url;
+    }
+  }
+
+  function stopQRScan() {
+    qrScanning = false;
+    qrBtn.classList.remove('active');
+    qrOverlay.classList.remove('show');
+    if (qrStream) {
+      qrStream.getTracks().forEach(function (t) { t.stop(); });
+      qrStream = null;
+    }
+    qrVideo.srcObject = null;
+  }
+
   // ─── Touch rotation ─────────────────────────────────────────
   let touchData = null;
 
@@ -645,6 +780,13 @@
     urlInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') loadBtn.click();
     });
+
+    // QR scan
+    qrBtn.addEventListener('click', function () {
+      if (qrScanning) { stopQRScan(); }
+      else { startQRScan(); }
+    });
+    qrClose.addEventListener('click', stopQRScan);
 
     // Wait for scene to render then setup touch
     const scene = document.getElementById('scene');

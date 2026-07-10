@@ -6,7 +6,7 @@ AR viewer for **STL** 3D models, built with [A-Frame](https://aframe.io/) and [A
 
 ## Features
 
-- **STL loading** — from a local file (`Browse`) or a pasted URL (`Load`).
+- **STL loading** — from a local file (`Browse`), a pasted URL (`Load`), or by **scanning a QR code** (`Scan QR`) that links to an `.stl` file.
 - **Binary & ASCII STL** — both formats parsed in-browser.
 - **Transform controls** — rotate (X/Y/Z), scale, and distance sliders.
 - **Touch rotation** — drag the camera view to spin the model.
@@ -17,7 +17,7 @@ AR viewer for **STL** 3D models, built with [A-Frame](https://aframe.io/) and [A
 ## Usage
 
 1. Open the app (deployed URL or local server).
-2. Tap **Browse** to pick a `.stl` file, or paste an STL URL and tap **Load**.
+2. Tap **Browse** to pick a `.stl` file, paste an STL URL and tap **Load**, or tap **Scan QR** and point the camera at a QR code whose link ends in `.stl`.
 3. Point your device camera at a [Hiro marker](https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png).
 4. Drag the camera view to rotate; use the sliders and swatches to adjust.
 
